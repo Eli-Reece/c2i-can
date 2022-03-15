@@ -12,7 +12,7 @@
 
     */
 #include <SPI.h>
-#include <wire.h>
+#include <Wire.h>
 
 const int SPI_CS_PIN = 9;   //13 on ATMega, 16 on 2515
 const int CAN_INT_PIN = 2;  //32 on ATMega, 12 on 2515
@@ -30,32 +30,30 @@ unsigned char flagRecv = 0;         //interrupt flag
 unsigned char len = 0;
 unsigned char buf[8];
 
-/*CAN message chars*/
-//From Leak Sensor                      //since these are IDs, should they be ints?
-unsigned char leakDetected = 0x02;      //no data out just ID
-//clarification on this
-//unsigned char leakSuddenReset = 0x12;   //!!!!!!data out, is this independent of 0x13, how does this work in general?
-unsigned char leakStatusResp = 0x202;   //(normal usage) data out receive 0x203 ID send out 0x202 and data
-unsigned char leakHBOut = 0x402;        //data out receive 0x403 and data, send out 0x402 and data
+/*CAN message IDs*/
+unsigned int leakDetected = 0x02;           //CAN MSG OUT: ID
+//unsigned char leakSuddenReset = 0x12;     //!!!!!!data out, is this independent of 0x13, how does this work in general?
+unsigned int leakStatusResp = 0x202;        //CAN MSG OUT: ID, DATA
+unsigned int leakHBOut = 0x402;             //CAN MSG OUT: ID
 //To Leak Sensor
-unsigned char leakReset = 0x13;         //data recieve
-unsigned char leakStatusReq = 0x203;    //no data recieved
-unsigned char leakHBRequest = 0x403;    //no data recieved
+unsigned int leakReset = 0x13;              //CAN MSG IN: ID
+unsigned int leakStatusReq = 0x203;         //CAN MSG IN: ID
+unsigned int leakHBRequest = 0x403;         //CAN MSG IN: ID, DATA?
 
-unsigned char msgid = 0x13;
+unsigned int msgid = 0x13;                  //switch statement case
 
 void setup()
 {
     /* I2C setup */  
     Wire.begin();
-    sendData = 0;
 
     /*CAN setup*/
     attachInterrupt(digitalPinToInterrupt(CAN_INT_PIN), MCP2515_ISR, FALLING);
-    while (CAN_OK != CAN.begin(CAN_500KBPS)) {
+    while (CAN_OK != CAN.begin(CAN_500KBPS)) {      //add 16 MHz?
         delay(100);
     }
 
+    //Fix the filters
     CAN.init_Mask(0, 0, 0x7ff);     //Mask 1 for ID                         
     CAN.init_Mask(1, 0, 0x7ff);     //Mask 2 for ID
     CAN.init_Filt(0, 0, 0x13);      //Allow ID 0x04
@@ -87,20 +85,20 @@ void loop()
         //clarification on case format
         //add critical check on all I2C pulls
         switch (msgid) { 
-            case '0x13':  //reset leak sensor (Master data -> sensor)
+            case 1:  //'0x13' reset leak sensor (Master data -> sensor)
                 //sendData = some sorta parsing of the buffer data or if trent already has a code
                 Wire.beginTransmission(0x14);           //sensor I2C address 0x14
                 Wire.write(sendData);
                 Wire.endTransmission();
                 break;
-            case '0x203': //send status data (Sensor data -> Master)
+            case 2: //'0x203' send status data (Sensor data -> Master)
                 //take data from sensor
                 recieveData = requestSensor(0x14, 1);
                 //send data out
                 //ID: 0x202
                 CAN.sendMsgBuf(0x402, 0, INT8U len, data_buf);
                 break;
-            case '0x403': //recieve HB data and send out sensor HB data
+            case 3: //'0x403' recieve HB data and send out sensor HB data
                 //sendData = HeartBeat data from CAN MSG
                 Wire.beginTransmission(0x14);           //sensor I2C address 0x14
                 Wire.write(sendData);
