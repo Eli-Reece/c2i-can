@@ -1,10 +1,14 @@
+/*
+1. should data be parsed on trent's end or mine
+2. make requestSensor into a try catch
+3. find out what kind of data trent wants (extension of part 1)
+*/
 #include <SPI.h>
 #include <Wire.h>
+#include "mcp2515_can.h"
 
 const int SPI_CS_PIN = 9;   //13 on ATMega, 16 on 2515
 const int CAN_INT_PIN = 2;  //32 on ATMega, 12 on 2515
-
-#include "mcp2515_can.h"
 mcp2515_can CAN(SPI_CS_PIN);
 
 /*I2C global */
@@ -54,11 +58,7 @@ void setup()
 
     
 }
-/*
-1. should data be parsed on trent's end or mine
-2. make requestSensor into a try catch
-3. find out what kind of data trent wants (extension of part 1)
-*/
+
 void loop()
 {
     //critical leak test
