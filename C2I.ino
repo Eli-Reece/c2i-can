@@ -49,7 +49,6 @@ void setup()
     CAN.init_Mask(0, 0, 0x7ff);      //Mask 1 for ID
     CAN.init_Filt(0, 0, 0x013);      //Allow ID 0x013, leakReset
     CAN.init_Filt(1, 0, 0x203);      //Allow ID 0x203, leakStatusReq
-
     CAN.init_Mask(1, 0, 0x7ff);      //Mask 2 for ID
     CAN.init_Filt(2, 0, 0x013);      //Allow ID 0x013, leakReset
     CAN.init_Filt(3, 0, 0x203);      //Allow ID 0x203, leakStatusReq
