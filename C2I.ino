@@ -28,19 +28,20 @@ int sendData = 0;                   //i2c data sent to Target
 /*CAN global */
 unsigned char flagRecv = 0;         //interrupt flag
 unsigned char len = 0;
+unsigned char emptybuf[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 unsigned char buf[8];
 
 /*CAN message IDs*/
-unsigned int leakDetected = 0x02;           //CAN MSG OUT: ID
+unsigned int leakDetected = 0x002;           //CAN MSG OUT: ID
 //unsigned char leakSuddenReset = 0x12;     //!!!!!!data out, is this independent of 0x13, how does this work in general?
 unsigned int leakStatusResp = 0x202;        //CAN MSG OUT: ID, DATA
 unsigned int leakHBOut = 0x402;             //CAN MSG OUT: ID
 //To Leak Sensor
-unsigned int leakReset = 0x13;              //CAN MSG IN: ID
+unsigned int leakReset = 0x013;              //CAN MSG IN: ID
 unsigned int leakStatusReq = 0x203;         //CAN MSG IN: ID
 unsigned int leakHBRequest = 0x403;         //CAN MSG IN: ID, DATA?
 
-unsigned int msgid = 0x13;                  //switch statement case
+unsigned long msgid = 0x13;                  //switch statement case
 
 void setup()
 {
@@ -54,61 +55,65 @@ void setup()
     }
 
     //Fix the filters
-    CAN.init_Mask(0, 0, 0x7ff);     //Mask 1 for ID                         
-    CAN.init_Mask(1, 0, 0x7ff);     //Mask 2 for ID
-    CAN.init_Filt(0, 0, 0x13);      //Allow ID 0x04
-    CAN.init_Filt(1, 0, 0x05);      //Allow ID 0x05
-    CAN.init_Filt(2, 0, 0x06);      //Allow ID 0x06
-    CAN.init_Filt(3, 0, 0x07);      //Allow ID 0x07
-    CAN.init_Filt(4, 0, 0x08);      //Allow ID 0x08
-    CAN.init_Filt(5, 0, 0x09);      //Allow ID 0x09
-}
+    CAN.init_Mask(0, 0, 0x7ff);      //Mask 1 for ID
+    CAN.init_Filt(0, 0, 0x013);      //Allow ID 0x013, leakReset
+    CAN.init_Filt(1, 0, 0x203);      //Allow ID 0x203, leakStatusReq
 
+    CAN.init_Mask(1, 0, 0x7ff);      //Mask 2 for ID
+    CAN.init_Filt(2, 0, 0x013);      //Allow ID 0x013, leakReset
+    CAN.init_Filt(3, 0, 0x203);      //Allow ID 0x203, leakStatusReq
+    CAN.init_Filt(4, 0, 0x403);      //Allow ID 0x403, leakHBReq
+    CAN.init_Filt(5, 0, 0x403);      //Allow ID 0x403, leakHBReq
+
+    
+}
+/*
+1. should data be parsed on trent's end or mine
+2. make requestSensor into a try catch
+3. find out what kind of data trent wants (extension of part 1)
+*/
 void loop()
 {
+    //critical leak test
     recieveData = requestSensor(0x14, 1);
-    if(recieveData >= 0x05){
-        //send leakDetected CAN BUS MSG
-        /*
-            CAN.sendMsgBuf(INT8U id, INT8U ext, INT8U len, data_buf);
-            CAN.sendMsgBuf(leakDetected, 0, 1, 0);
-            OR
-            CAN.sendMsgBuf(0x00, 0, 1, leakDetected);
-        */
+    if(recieveData == 1){   //if leak data was 1
+            CAN.sendMsgBuf(leakDetected, 0, 1, emptybuf);
     }
-
+    //incoming CAN message parsing
     if(flagRecv){
         flagRecv = 0;
         CAN.readMsgBuf(&len, buf);
         //parse the buf data and mask what data I want
-        
+        msgid = CAN.getCanId();
         //clarification on case format
         //add critical check on all I2C pulls
         switch (msgid) { 
-            case 1:  //'0x13' reset leak sensor (Master data -> sensor)
-                //sendData = some sorta parsing of the buffer data or if trent already has a code
+            case 0x13:                                  //'0x13' reset leak sensor (Master data -> sensor)
+                sendData = 20;                          //if trent took 20 as a code to reset
                 Wire.beginTransmission(0x14);           //sensor I2C address 0x14
                 Wire.write(sendData);
                 Wire.endTransmission();
                 break;
-            case 2: //'0x203' send status data (Sensor data -> Master)
+            case 0x203:                                 //'0x203' send status data (Sensor data -> Master)
                 //take data from sensor
                 recieveData = requestSensor(0x14, 1);
-                //send data out
-                //ID: 0x202
-                CAN.sendMsgBuf(0x402, 0, INT8U len, data_buf);
-                break;
-            case 3: //'0x403' recieve HB data and send out sensor HB data
-                //sendData = HeartBeat data from CAN MSG
-                Wire.beginTransmission(0x14);           //sensor I2C address 0x14
-                Wire.write(sendData);
-                Wire.endTransmission();
-                recieveData = requestSensor(0x14, 1);   //recieve data from heartbeat
-                if(recieveData < 0x04){ //sensor data (idk if it'll be 0x04)
-                    //ID: 0x402
-                    //CAN.sendMsgBuf(0x402, 0, INT8U len, data_buf); healthy code
+                if(recieveData == 1){                   //if leak data was 1
+                    CAN.sendMsgBuf(leakDetected, 0, 1, emptybuf);
                 } else {
-                    //CAN.sendMsgBuf(0x402, 0, INT8U len, data_buf); not healthy code
+                    //Parse receiveData into the buf
+
+
+                    //ID: 0x202
+                    CAN.sendMsgBuf(0x202, 0, 8, buf);
+                }
+                break;
+            case 0x403: //'0x403' send out sensor HB data
+                recieveData = requestSensor(0x14, 1);
+                if(recieveData == 1){                   //if leak data was 1
+                    CAN.sendMsgBuf(leakDetected, 0, 1, emptybuf);
+                } else {
+                    //ID: 0x402
+                    CAN.sendMsgBuf(0x402, 0, 8, emptybuf);
                 }
                 break;
             default:
@@ -130,6 +135,7 @@ void MCP2515_ISR() {
 
 /* I2C get data from Sensor */
 //try catch to detect sensor disconnection
+// recieveData = requestSensor(address, length);
 byte requestSensor(int address, int length){
     Wire.requestFrom(address, length); //address, length
     if(Wire.available()){
@@ -137,4 +143,3 @@ byte requestSensor(int address, int length){
     }   
     return rD;
 }
-// recieveData = requestSensor(address, length);
