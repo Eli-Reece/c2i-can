@@ -1,16 +1,3 @@
-    /*
-        1. Receive data from I2C and store into recieveData check if CRITICAL
-            - if critical send CAN msg for CRITICAL 
-        2. Mask and Filter CAN
-        3. Parse filtered CAN message -> determine what action to take (case statement? prolly just if else)
-            - send sensor data to master
-            - send master data to sensor
-            - etc
-        4. 
-        5. Receive data from I2C and store into recieveData check if CRITICAL
-        crit water level > 0x05
-
-    */
 #include <SPI.h>
 #include <Wire.h>
 
