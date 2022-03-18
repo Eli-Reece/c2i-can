@@ -1,30 +1,46 @@
-/*
-1. should data be parsed on trent's end or mine
-2. make requestSensor into a try catch
-3. find out what kind of data trent wants (extension of part 1)
-*/
 #include <SPI.h>
 #include <Wire.h>
 #include "mcp2515_can.h"
 
-const int SPI_CS_PIN = 9;   //13 on ATMega, 16 on 2515
-const int CAN_INT_PIN = 2;  //32 on ATMega, 12 on 2515
+/*  Consts
+    - Figure out what to do with the actual SS/CS pin since using the digital pin
+    - Read that the actual cs pin needs to be set to high or something idk
+*/
+const int SPI_CS_PIN = 9;   //DIGITAL PIN 9 LETSGOOOO
+const int CAN_INT_PIN = 2;  //DIGITAL PIN 2
 mcp2515_can CAN(SPI_CS_PIN);
 
-/*I2C global */
+/*  I2C global
+    - Figure out with trent what kinda of data he wants when getting a reset request
+*/
 byte recieveData;                   //i2c data to be received from Target
 byte rD;
 int sendData = 0;                   //i2c data sent to Target
 
-/*CAN global */
+/*  CAN global 
+    - set interrupt flag
+    - len, buf
+    - initialized an empty buf just to save time 
+*/
 unsigned char flagRecv = 0;         //interrupt flag
 unsigned char len = 0;
 unsigned char emptybuf[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 unsigned char buf[8];
 
-/*CAN message IDs*/
+/*  CAN message IDs (Leak Detection Specific)  
+    IDS COMING IN:
+    leakReset (0x13) -> tells sensor to reset
+    leakStatusReq (0x203) -> requests current sensor data
+    leakHBRequest (0x403) -> requests current connection status (if data is pulled, send 1 else 0)
+    IDS GOING OUT and DATA (if it has data):
+    leakDetected (0x002) -> no data
+    leakStatusResp (0x202) -> current sensor data
+    leakHBOut (0x402) -> 1 or 0 determining connection status or if data is still being pulled
+    - leaksuddenreset kinda corresponds to the HB out
+    - still need to figure out specifics with Trent and Tristan
+*/
 unsigned int leakDetected = 0x002;           //CAN MSG OUT: ID
-//unsigned char leakSuddenReset = 0x12;     //!!!!!!data out, is this independent of 0x13, how does this work in general?
+//unsigned char leakSuddenReset = 0x12;     
 unsigned int leakStatusResp = 0x202;        //CAN MSG OUT: ID, DATA
 unsigned int leakHBOut = 0x402;             //CAN MSG OUT: ID
 //To Leak Sensor
@@ -36,16 +52,25 @@ unsigned long msgid = 0x13;                  //switch statement case
 
 void setup()
 {
-    /* I2C setup */  
+    /*  I2C setup    */  
     Wire.begin();
 
-    /*CAN setup*/
+    /*  CAN setup   
+        - shouldn't have to add the 16MHz but it might be good to make sure
+    */
     attachInterrupt(digitalPinToInterrupt(CAN_INT_PIN), MCP2515_ISR, FALLING);
     while (CAN_OK != CAN.begin(CAN_500KBPS)) {      //add 16 MHz?
         delay(100);
     }
 
-    //Fix the filters
+    /*  CAN ID FILTERING
+        MASK 0 -> set to ID
+        Filters 0-1 correspond to MASK 0
+        MASK 1 -> set to ID
+        Filters 2-5 correspond to MASK 0
+        - Read that all masks/filters need to be set but haven't tested
+        - thats why there is repeat filtering
+    */
     CAN.init_Mask(0, 0, 0x7ff);      //Mask 1 for ID
     CAN.init_Filt(0, 0, 0x013);      //Allow ID 0x013, leakReset
     CAN.init_Filt(1, 0, 0x203);      //Allow ID 0x203, leakStatusReq
@@ -53,9 +78,7 @@ void setup()
     CAN.init_Filt(2, 0, 0x013);      //Allow ID 0x013, leakReset
     CAN.init_Filt(3, 0, 0x203);      //Allow ID 0x203, leakStatusReq
     CAN.init_Filt(4, 0, 0x403);      //Allow ID 0x403, leakHBReq
-    CAN.init_Filt(5, 0, 0x403);      //Allow ID 0x403, leakHBReq
-
-    
+    CAN.init_Filt(5, 0, 0x403);      //Allow ID 0x403, leakHBReq    
 }
 
 void loop()
@@ -65,13 +88,15 @@ void loop()
     if(recieveData == 1){   //if leak data was 1
             CAN.sendMsgBuf(leakDetected, 0, 1, emptybuf);
     }
-    //incoming CAN message parsing
+
     if(flagRecv){
         flagRecv = 0;
         CAN.readMsgBuf(&len, buf);
         //parse the buf data and mask what data I want
+        
         msgid = CAN.getCanId();
-        //clarification on case format
+
+        //probably need to fix case format
         //add critical check on all I2C pulls
         switch (msgid) { 
             case 0x13:                                  //'0x13' reset leak sensor (Master data -> sensor)
@@ -112,7 +137,6 @@ void loop()
     }
   
 }
-
 
 /*CAN Controller Interrupt*/
 void MCP2515_ISR() {
